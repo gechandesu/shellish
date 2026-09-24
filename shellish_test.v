@@ -30,7 +30,6 @@ fn test_strip_ansi_escape_codes() {
 }
 
 // Original test data taken from https://github.com/python/cpython/blob/3.14/Lib/test/test_shlex.py
-// FIXME: All test-cases must pass.
 // vfmt off
 const test_data = {
 	'foo':                      ['foo']
@@ -90,10 +89,10 @@ const test_data = {
 	'":-) ;-)"':                [':-) ;-)']
 	'foo `bar baz`':            ['foo', '`bar baz`']
 	r'foo "$(bar baz)"':        ['foo', r'$(bar baz)']
-	// r'foo $(bar)':              ['foo', r'$(bar)'] // failing
-	// r'foo $(bar baz)':          ['foo', r'$(bar baz)'] // failing
-	// r'foo#bar\nbaz':            ['foo', 'baz'] // failing
-	// 'foo;bar':                  ['foo', ';', 'bar'] // failing
+	r'foo $(bar)':              ['foo', r'$(bar)']
+	r'foo $(bar baz)':          ['foo', r'$(bar baz)']
+	r'foo#bar\nbaz':            ['foo', 'baz']
+	'foo;bar':                  ['foo', ';', 'bar']
 
 	'"foo\\\\\\x bar\\" df\'a\\ \'df"': ['foo\\\\x bar" df\'a\\ \'df']
 	'"foo\\ x\\x\\\\"\\\'"foobar"': [r"foo\ x\x\'foobar"]

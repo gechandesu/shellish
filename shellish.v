@@ -8,7 +8,7 @@ pub const safe_chars = '%+,-./0123456789:=@ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghij
 // special_chars contains ASCII characters that must be escaped in shell.
 pub const special_chars = ' \$"\'\\!'
 
-const special_chars_runes = [` `, `$`, `"`, `'`, `\``, `\\`, `!`]
+const special_chars_runes = [` `, `$`, `"`, `'`, `\``, `\\`, `!`]!
 
 // quote returns a quoted version of string `s`.
 //
@@ -163,12 +163,14 @@ fn parse(line string) ![]string {
 	mut single_quoted := false
 	mut double_quoted := false
 	mut back_quoted := false
-	mut dollar_quoted := false
+	mut dollar_depth := 0
+	mut commented := false
 
 	mut got := Mode.no
 
 	for i, c in line {
 		mut r := c
+		dollar_quoted := dollar_depth > 0
 
 		if escaped {
 			if r == `t` {
@@ -177,8 +179,14 @@ fn parse(line string) ![]string {
 			if r == `n` {
 				r = `\n`
 			}
-			buf << r
 			escaped = false
+			if commented {
+				if r == `\n` {
+					commented = false
+				}
+				continue
+			}
+			buf << r
 			got = .normal
 			continue
 		}
@@ -196,6 +204,36 @@ fn parse(line string) ![]string {
 				}
 				escaped = true
 			}
+			continue
+		}
+
+		if commented {
+			if r == `\n` {
+				commented = false
+			}
+			continue
+		}
+
+		if r == `#` && !single_quoted && !double_quoted && !back_quoted && !dollar_quoted {
+			// Everything up to the end of the line is a comment. The word being
+			// accumulated, if any, is terminated by it.
+			if got != .no {
+				tokens << buf.bytestr()
+				buf = []u8{}
+				got = .no
+			}
+			commented = true
+			continue
+		}
+
+		if r == `;` && !single_quoted && !double_quoted && !back_quoted && !dollar_quoted {
+			// Command separator is a token on its own.
+			if got != .no {
+				tokens << buf.bytestr()
+				buf = []u8{}
+			}
+			tokens << ';'
+			got = .no
 			continue
 		}
 
@@ -217,17 +255,18 @@ fn parse(line string) ![]string {
 				}
 			}
 			`(` {
-				if !single_quoted && !double_quoted && !dollar_quoted {
-					if !dollar_quoted && buf.len - 1 >= 0 && buf[buf.len - 1..][0] == `$` {
-						dollar_quoted = true
+				if !single_quoted && !double_quoted {
+					// Opens a `$(` expression or nests inside an already opened one.
+					if dollar_quoted || (buf.len > 0 && buf.last() == `$`) {
+						dollar_depth++
 						buf << r
 						continue
 					}
 				}
 			}
 			`)` {
-				if !single_quoted && !double_quoted && !dollar_quoted {
-					dollar_quoted = false
+				if !single_quoted && !double_quoted && dollar_quoted {
+					dollar_depth--
 				}
 			}
 			`"` {
@@ -264,7 +303,7 @@ fn parse(line string) ![]string {
 		single_quoted { return error('non-terminated quote in string') }
 		double_quoted { return error('non-terminated double quote in string') }
 		back_quoted { return error('non-terminated backtick in string') }
-		dollar_quoted { return error('non-terminated dollar expression in string') }
+		dollar_depth > 0 { return error('non-terminated dollar expression in string') }
 		else {}
 	}
 
